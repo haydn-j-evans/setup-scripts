@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ZOOM_VERSION=5.10.4.2845
+USERNAME=haydn
 
 main () {
 
@@ -8,6 +8,20 @@ main () {
     prepare_system
     install_snap_packages
     add_repositories
+    install_libssl
+    install_apt_packages
+    set_up_java
+    set_up_nodejs
+    set_up_golang
+    install_stern
+    install_kubectl
+    install_helm
+    install_minikube
+    install_docker_compose
+    configure_vim
+    install_and_configure_zsh
+    download_and_configure_kubectx
+    finish_system_preparation
 
 }
 
@@ -22,11 +36,13 @@ prepare_system () {
     unset ZSH
 
     echo 'Updating all packages'
-    apt update
-    apt upgrade
+    apt update -y
+    apt upgrade -y
+    apt install lsb-release ca-certificates apt-transport-https software-properties-common -y
     
     apt remove firefox-esr -y
     apt remove firefox -y
+    apt install curl -y
 
 }
 
@@ -44,29 +60,48 @@ install_snap_packages () {
     snap install spotify
     snap install gitkraken
     snap install teams
-    snap install install
-    snap install zoom
+    snap install zoom-client
+    snap install code --classic
 
 }
 
 add_repositories () {
+    
+    add-apt-repository ppa:danielrichter2007/grub-customizer
     #azure-cli
+    rm /etc/apt/sources.list.d/archive_uri-https_packages_microsoft_com_repos_azure-cli_-jammy.list
     curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
-    add-apt-repository "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ focal main" -y
+    AZ_REPO=$(lsb_release -cs)
+    echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" | tee /etc/apt/sources.list.d/azure-cli.list
 
     # Chrome
+    rm /etc/apt/sources.list.d/archive_uri-http_dl_google_com_linux_chrome_deb_-jammy.list
     wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
     add-apt-repository "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" -y
-
+    
     # Docker
+    rm /usr/share/keyrings/docker-archive-keyring.gpg
+    rm /etc/apt/sources.list.d/docker.list
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-    sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
 }
 
+install_libssl(){
+
+    wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.0g-2ubuntu4_amd64.deb
+    dpkg -i libssl1.1_1.1.0g-2ubuntu4_amd64.deb
+    rm libssl1.1_1.1.0g-2ubuntu4_amd64.deb
+
+    wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl-dev_1.1.0g-2ubuntu4_amd64.deb
+    dpkg -i libssl-dev_1.1.0g-2ubuntu4_amd64.deb
+    rm libssl-dev_1.1.0g-2ubuntu4_amd64.deb
+
+}
 install_apt_packages () {
 
-    apt update 
+    apt update
+    apt install libssl1.1 -y
     apt install gettext -y
     apt install git -y
     apt install snapd -y
@@ -96,8 +131,6 @@ install_apt_packages () {
     apt install net-tools -y
     apt install gnome-software -y
     apt install gnome-shell-extensions -y
-    apt install openjdk-11-jdk -y
-    apt install openjdk-17-jdk -y
     apt install spotify-client -y
     apt install vlc -y
     apt install virtualbox -y
@@ -106,42 +139,51 @@ install_apt_packages () {
     apt install docker-ce docker-ce-cli containerd.io docker-compose-plugin -y
     apt install pulseaudio -y
     apt install pavucontrol -y
+    apt install bison -y
 
 }
 
 set_up_java () {
     
-    curl -s "https://get.sdkman.io" | bash
+    runuser -l $USERNAME -c 'curl -s "https://get.sdkman.io" | bash'
+    source "/home/$USERNAME/.sdkman/bin/sdkman-init.sh"
     sdk install java 11.0.16-amzn 
-    sdk install java 17.0.4 
+    sdk install java 17.0.4-amzn
 
-}
-
-install_zoom () {
-    echo "Downloading Zoom version $ZOOM_VERSION"
-    wget -P /tmp https://cdn.zoom.us/prod/$ZOOM_VERSION/zoom_amd64.deb
-
-    echo 'Installing Zoom'
-    apt install /tmp/zoom_amd64.deb -y
-
-}
-
-install_gitkraken () {
-    echo "Downloading Gitkraken"
-    wget -P /tmp https://release.gitkraken.com/linux/gitkraken-amd64.deb
-
-    echo "Installing Gitkraken"
-    apt install /tmp/gitkraken-amd64.deb -y
 }
 
 set_up_nodejs () {
-    wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
+    
+    runuser -l $USERNAME -c 'wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash'
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
     nvm install --lts
     nvm use --lts
 }
 
-set_up_go () {
+set_up_golang () {
 
+    runuser -l $USERNAME -c 'rm -rf  /home/$USERNAME/.gvm'
+
+    runuser -l $USERNAME -c 'zsh < <(curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/master/binscripts/gvm-installer)'
+    source /home/$USERNAME/.gvm/scripts/gvm
+    gvm install go1.4 -B
+    gvm use go1.4
+    gvm install go1.19 -B
+    gvm use go1.19
+}
+
+install_kubectl () {
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+    rm kubectl
+}
+
+install_helm () {
+
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    helm plugin install https://github.com/databus23/helm-diff
 }
 install_minikube () {
     if ! [ -x "$(command -v minikube)" ]; then
@@ -164,93 +206,117 @@ install_stern () {
 }
 
 install_docker_compose () {
-	mkdir -p /usr/local/lib/docker/cli-plugins
-	curl -SL https://github.com/docker/compose/releases/download/v2.4.1/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
-	chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
     sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+}
 
 configure_vim () {
-    mkdir -p ~/.vim/autoload ~/.vim/bundle && \
-    curl -LSso ~/.vim/autoload/pathogen.vim https://tpo.pe/pathogen.vim
 
-    touch ~/.vimrc
+    rm /home/$USERNAME/.vimrc
 
-    echo "execute pathogen#infect()" >> ~/.vimrc
-    echo "syntax on" >> ~/.vimrc
-    echo "filetype plugin indent on" >> ~/.vimrc
-    echo "set number" >> ~/.vimrc
+    runuser -l $USERNAME -c 'mkdir -p /home/$USERNAME.vim/autoload /home/$USERNAME/.vim/bundle && \
+    curl -LSso /home/$USERNAME.vim/autoload/pathogen.vim https://tpo.pe/pathogen.vim#' 
+
+    touch /home/$USERNAME/.vimrc
+
+    chown $USERNAME:$USERNAME /home/$USERNAME/.vimrc
+
+    echo "execute pathogen#infect()" >> /home/$USERNAME/.vimrc
+    echo "syntax on" >> /home/$USERNAME/.vimrc
+    echo "filetype plugin indent on" >> /home/$USERNAME/.vimrc
+    echo "set number" >> /home/$USERNAME/.vimrc
 
     # configure vim airline plugin
 
-    rm -rf ~/.vim/bundle/vim-airline
+    rm -rf /home/$USERNAME/.vim/bundle/vim-airline
 
-    git clone https://github.com/vim-airline/vim-airline ~/.vim/bundle/vim-airline
+    runuser -l $USERNAME -c 'git clone https://github.com/vim-airline/vim-airline /home/$USERNAME/.vim/bundle/vim-airline'
 }
 
 install_and_configure_zsh () {
     
-    rm -rf ~/.oh-my-zsh
+    rm -rf /home/$USERNAME/.oh-my-zsh
 
-    rm -rf ~/.oh-my-zsh/custom/plugins/zsh-kubectl-prompt
+    rm -rf /home/$USERNAME/.oh-my-zsh/custom/plugins/zsh-kubectl-prompt
 
-    rm -rf ~/.oh-my-zsh/custom/themes/powerlevel10k
+    rm -rf /home/$USERNAME/.oh-my-zsh/custom/themes/powerlevel10k
 
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    runuser -l $USERNAME -c 'sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended'
 
-    git clone http://github.com/robbyrussell/oh-my-zsh ~/.oh-my-zsh
+    runuser -l $USERNAME -c 'git clone http://github.com/superbrothers/zsh-kubectl-prompt /home/$USERNAME/.oh-my-zsh/custom/plugins/zsh-kubectl-prompt'
 
-    git clone http://github.com/superbrothers/zsh-kubectl-prompt ~/.oh-my-zsh/custom/plugins/zsh-kubectl-prompt
+    runuser -l $USERNAME -c 'git clone --depth=1 https://github.com/romkatv/powerlevel10k.git /home/$USERNAME/.oh-my-zsh/custom/themes/powerlevel10k'
 
-    git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ~/.oh-my-zsh/custom/themes/powerlevel10k
+    THEME="powerlevel10k/powerlevel10k"; sed -i s/^ZSH_THEME=".\+"$/ZSH_THEME=\"$THEME\"/g /home/$USERNAME/.zshrc
 
-    THEME="powerlevel10k/powerlevel10k"; sed -i s/^ZSH_THEME=".\+"$/ZSH_THEME=\"$THEME\"/g ~/.zshrc
+    sed 's/\(^plugins=([^)]*\)/\1 docker docker-compose zsh-autosuggestions zsh-syntax-highlighting/' /home/$USERNAME/.zshrc
 
-    sed 's/\(^plugins=([^)]*\)/\1 docker docker-compose zsh-autosuggestions zsh-syntax-highlighting/' ~/.zshrc
+    echo "" >> /home/$USERNAME/.zshrc
+    echo "#Adding kubectl autocompletion" >> /home/$USERNAME/.zshrc
+    echo "source <(kubectl completion zsh)" >> /home/$USERNAME/.zshrc
+    echo "" >> /home/$USERNAME/.zshrc
+    echo "#Adding az cli autocompletion" >> /home/$USERNAME/.zshrc
+    echo "source /home/$USERNAME/.oh-my-zsh/completions/az.completion" >> /home/$USERNAME/.zshrc
+    echo "" >> /home/$USERNAME/.zshrc
+    echo "#Adding minikube autocompletion" >> /home/$USERNAME/.zshrc
+    echo "source <(minikube completion zsh)" >> /home/$USERNAME/.zshrc
+    echo "" >> /home/$USERNAME/.zshrc
+    echo "#Adding helm autocompletion" >> /home/$USERNAME/.zshrc
+    echo "source <(helm completion zsh)" >> /home/$USERNAME/.zshrc
+    echo "" >> /home/$USERNAME/.zshrc
+    echo "#Adding Stern Autocompletion" >> /home/$USERNAME/.zshrc
+    echo "source <(stern --completion zsh)" >> /home/$USERNAME/.zshrc
+    echo "" >> /home/$USERNAME/.zshrc
+    echo "#Adding zsh reload step" >> /home/$USERNAME/.zshrc
+    echo "autoload -U compinit && compinit" >> /home/$USERNAME/.zshrc
+    echo "" >> /home/$USERNAME/.zshrc
 
-    echo "" >> ~/.zshrc
-    echo "#Adding kubectl autocompletion" >> ~/.zshrc
-    echo "source <(kubectl completion zsh)" >> ~/.zshrc
-    echo "" >> ~/.zshrc
-    echo "#Adding az cli autocompletion" >> ~/.zshrc
-    echo "source ~/.oh-my-zsh/completions/az.completion" >> ~/.zshrc
-    echo "" >> ~/.zshrc
-    echo "#Adding minikube autocompletion" >> ~/.zshrc
-    echo "source <(minikube completion zsh)" >> ~/.zshrc
-    echo "" >> ~/.zshrc
-    echo "#Adding helm autocompletion" >> ~/.zshrc
-    echo "source <(helm completion zsh)" >> ~/.zshrc
-    echo "" >> ~/.zshrc
-    echo "#Adding Stern Autocompletion" >> ~/.zshrc
-    echo "source <(stern --completion zsh)" >> ~/.zshrc
-    echo "" >> ~/.zshrc
-    echo "#Adding zsh reload step" >> ~/.zshrc
-    echo "autoload -U compinit && compinit" >> ~/.zshrc
-    echo "" >> ~/.zshrc
+    echo "#Adding kubectl aliases" >> /home/$USERNAME/.zshrc
+    echo "" >> /home/$USERNAME/.zshrc
+    echo "alias watch='watch -d '" >> /home/$USERNAME/.zshrc
+    echo "alias k='kubectl'" >> /home/$USERNAME/.zshrc
+    echo "alias kc='k config view --minify | grep name'"  >> /home/$USERNAME/.zshrc
+    echo "alias c='clear'" >> /home/$USERNAME/.zshrc
+    echo "alias kd='kubectl describe'" >> /home/$USERNAME/.zshrc
+    echo "alias ke='kubectl explain'" >> /home/$USERNAME/.zshrc
+    echo "alias kf='kubectl create -f'" >> /home/$USERNAME/.zshrc
+    echo "alias kg='kubectl get pods --show-labels'" >> /home/$USERNAME/.zshrc
+    echo "alias kh='kubectl --help | more'" >> /home/$USERNAME/.zshrc
+    echo "alias kgns='kubectl get namespaces'" >> /home/$USERNAME/.zshrc
+    echo "alias l='ls -lrt'" >> /home/$USERNAME/.zshrc
+    echo "alias ll='vi ls -rt | tail -1'" >> /home/$USERNAME/.zshrc
+    echo "alias kgaa='kubectl get all'" >> /home/$USERNAME/.zshrc
+    echo "alias kgcm='kubectl get configmap'" >> /home/$USERNAME/.zshrc
+    echo "alias kgs='kubectl get secret'" >> /home/$USERNAME/.zshrc
+    echo "alias kgp='kubectl get pod'" >> /home/$USERNAME/.zshrc
+    echo "alias kging='kubectl get ingress'" >> /home/$USERNAME/.zshrc
+    echo "alias kgsv='kubectl get service'" >> /home/$USERNAME/.zshrc
+    echo "alias h='helm'" >> /home/$USERNAME/.zshrc
+    echo "alias ctx='kubectx'" >> /home/$USERNAME/.zshrc
+    echo "alias ns='kubens'" >> /home/$USERNAME/.zshrc
+}
 
-    echo "#Adding kubectl aliases" >> ~/.zshrc
-    echo "" >> ~/.zshrc
-    echo "alias watch='watch -d '" >> ~/.zshrc
-    echo "alias k='kubectl'" >> ~/.zshrc
-    echo "alias kc='k config view --minify | grep name'"  >> ~/.zshrc
-    echo "alias c='clear'" >> ~/.zshrc
-    echo "alias kd='kubectl describe'" >> ~/.zshrc
-    echo "alias ke='kubectl explain'" >> ~/.zshrc
-    echo "alias kf='kubectl create -f'" >> ~/.zshrc
-    echo "alias kg='kubectl get pods --show-labels'" >> ~/.zshrc
-    echo "alias kh='kubectl --help | more'" >> ~/.zshrc
-    echo "alias kgns='kubectl get namespaces'" >> ~/.zshrc
-    echo "alias l='ls -lrt'" >> ~/.zshrc
-    echo "alias ll='vi ls -rt | tail -1'" >> ~/.zshrc
-    echo "alias kgaa='kubectl get all'" >> ~/.zshrc
-    echo "alias kgcm='kubectl get configmap'" >> ~/.zshrc
-    echo "alias kgs='kubectl get secret'" >> ~/.zshrc
-    echo "alias kgp='kubectl get pod'" >> ~/.zshrc
-    echo "alias kging='kubectl get ingress'" >> ~/.zshrc
-    echo "alias kgsv='kubectl get service'" >> ~/.zshrc
-    echo "alias h='helm'" >> ~/.zshrc
-    echo "alias ctx='kubectx'" >> ~/.zshrc
-    echo "alias ns='kubens'" >> ~/.zshrc
+download_and_configure_kubectx () {
+    rm -rf /home/$USERNAME/.kubectx
+
+    runuser -l $USERNAME -c 'git clone https://github.com/ahmetb/kubectx /home/$USERNAME/.kubectx'
+
+    mv /home/$USERNAME/.kubectx/kubectx /usr/local/bin/kubectx
+
+    mv /home/$USERNAME/.kubectx/kubens /usr/local/bin/kubens
+
+    chmod +x /usr/local/bin/kubectx
+
+    chmod +x /usr/local/bin/kubens
+
+    runuser -l $USERNAME -c 'mkdir -p /home/$USERNAME/.oh-my-zsh/completions'
+
+    chmod -R 755 /home/$USERNAME/.oh-my-zsh/completions
+
+    cp -s /home/$USERNAME/.kubectx/completion/_kubectx.zsh /home/$USERNAME/.oh-my-zsh/completions/_kubectx.zsh
+
+    cp -s /home/$USERNAME/.kubectx/completion/_kubens.zsh /home/$USERNAME/.oh-my-zsh/completions/_kubens.zsh
 }
 
 configure_az-cli_completion () {
@@ -259,57 +325,31 @@ configure_az-cli_completion () {
     mv /tmp/az.completion ~/.oh-my-zsh/completions/az.completion
 }
 
-download_and_configure_kubectx () {
-    rm -rf ~/.kubectx
-
-    git clone https://github.com/ahmetb/kubectx ~/.kubectx
-
-    mv ~/.kubectx/kubectx /usr/local/bin/kubectx
-
-    mv ~/.kubectx/kubens /usr/local/bin/kubens
-    apt-get -f install virtualbox-6.1 -y
-    chmod +x /usr/local/bin/kubectx
-
-    chmod +x /usr/local/bin/kubens
-
-    mkdir -p ~/.oh-my-zsh/completions
-
-    chmod -R 755 ~/.oh-my-zsh/completions
-
-    cp -s ~/.kubectx/completion/_kubectx.zsh ~/.oh-my-zsh/completions/_kubectx.zsh
-
-    cp -s ~/.kubectx/completion/_kubens.zsh ~/.oh-my-zsh/completions/_kubens.zsh
-}
-
 install_and_configure_gui_themes () {
 
     #gtk-theme
-    rm -rf ~/.WhiteSur-gtk-theme
+    rm -rf /home/$USERNAME/.WhiteSur-gtk-theme
+    rm -rf /home/$USERNAME/.WhiteSur-icon-theme
 
-    git clone https://github.com/vinceliuice/WhiteSur-gtk-theme ~/.WhiteSur-gtk-theme
+    runuser -l $USERNAME -c 'git clone https://github.com/vinceliuice/WhiteSur-gtk-theme  runuser -l $USERNAME -c  /home/$USERNAME/.WhiteSur-gtk-theme'
+    runuser -l $USERNAME -c 'git clone https://github.com/vinceliuice/WhiteSur-icon-theme  runuser -l $USERNAME -c  /home/$USERNAME/.WhiteSur-icon-theme'
+    runuser -l $USERNAME -c wget https://github.com/vinceliuice/WhiteSur-wallpapers/raw/main/1080p/WhiteSur-light.png -P /home/$USERNAME/Pictures/
 
-    bash ~/.WhiteSur-gtk-theme/install.sh -n default -b default -c light -t default -m --right --silent-mode  -i ubuntu
+    bash /home/$USERNAME/.WhiteSur-gtk-theme/install.sh -n default -b default -c light -t default -m --right --silent-mode  -i ubuntu
 
-    bash ~/.WhiteSur-gtk-theme/tweaks.sh -f default -F -s -d -b default
+    bash /home/$USERNAME/.WhiteSur-gtk-theme/tweaks.sh -f default -F -s -d -b default
 
-    bash ~/.WhiteSur-gtk-theme/tweaks.sh -g 
+    bash /home/$USERNAME/.WhiteSur-gtk-theme/tweaks.sh -g
+
+    bash /home/$USERNAME/.WhiteSur-icon-theme/install.sh -t default
 
     # Grub themes
 
-    rm -rf ~/.grub-themes
+    rm -rf /home/$USERNAME/.grub-themes
 
-    git clone https://github.com/vinceliuice/grub2-themes ~/.grub-themes
+    runuser -l $USERNAME -c 'git clone https://github.com/vinceliuice/grub2-themes /home/$USERNAME/.grub-themes'
 
-    bash ~/.grub-themes/install.sh -b -t vimix -s 1080p
-
-    #icon themes
-
-    rm -rf ~/.WhiteSur-icon-theme
-
-    git clone https://github.com/vinceliuice/WhiteSur-icon-theme ~/.WhiteSur-icon-theme
-
-    bash ~/.WhiteSur-icon-theme/install.sh -t default
-
+    bash /home/$USERNAME/.grub-themes/install.sh -b -t vimix -s 1080p
 
 }
 
@@ -318,35 +358,5 @@ finish_system_preparation () {
     apt autoremove
 }
 
-
-check_if_sudo
-
-install_snap_packages
-add_spotify_repository
-add_virtualbox_repository
-add_azure_cli_repository
-add_chrome_repository
-add_docker_repository
-add_vscode_repository
-add_onedrive_repository
-
-prepare_system
-
-install_apt_packages
-
-set_up_java
-install_zoom
-install_gitkraken
-install_slack
-install_postman
-install_node_version_manager
-install_minikube
-install_stern
-configure_vim
-install_and_configure_zsh
-configure_az-cli_completion
-download_and_configure_kubectx
-install_and_configure_gui_themes
-
-finish_system_preparation
+main
 
