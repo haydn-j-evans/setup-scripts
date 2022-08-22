@@ -140,6 +140,7 @@ install_apt_packages () {
     apt install pulseaudio -y
     apt install pavucontrol -y
     apt install bison -y
+    apt install yad -y
 
 }
 
