@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# this bash script named  "sshuttle-warner" 
+# will display "yad" as a green bottle icon in system tray, 
+# while sshuttle is active and hides your IP while websurfing (like a VPN).
+# if sshuttle fails (broken pipe or whatever), the icon will disappear 
+
+yad --notification --image=/home/haydn/bin/connected.png --text="SSHuttle Currently Connected!" --listen  &
+
+sshuttle -r $1@51.138.80.61:2222 172.16.102.198/32 51.136.75.59/32 10.0.0.0/8 51.136.112.161/32 51.136.112.161/32 13.80.29.89/32 13.80.71.109/32 51.144.113.131/32 52.157.203.85/32 13.95.227.234/32 20.54.178.12/32 51.138.2.38/32 40.114.160.104/32 172.16.0.0/12 --ssh-cmd 'ssh -o ServerAliveInterval=60'
+
+kill  ` ps -A -o pid,cmd|grep yad | grep -v grep |head -n 1 | awk '{print $1}' `  
+
+
